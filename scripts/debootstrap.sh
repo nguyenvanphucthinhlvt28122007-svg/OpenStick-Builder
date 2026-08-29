@@ -28,7 +28,53 @@ mount -o bind /run ${CHROOT}/run/
 cp scripts/setup.sh ${CHROOT}
 chroot ${CHROOT} qemu-aarch64-static /bin/sh -c /setup.sh
 
-# cleanup
+# ================================================================
+# BUILD KERNEL TỪ SOURCE (trên host) - KHÔNG CẦN TẢI FILE .deb
+# ================================================================
+
+# Cài đặt công cụ build (nếu thiếu)
+apt-get update
+apt-get install -y build-essential git bc kmod cpio flex libncurses5-dev \
+    libelf-dev libssl-dev dwarves bison fakeroot debhelper gcc-aarch64-linux-gnu
+
+# Clone source kernel (chỉ lấy commit mới nhất)
+git clone --depth 1 https://github.com/dann2333/MSM8916-openstick-linux-kernel.git /tmp/kernel-src
+cd /tmp/kernel-src
+
+# Thiết lập biến môi trường cho cross-compile
+export ARCH=arm64
+export CROSS_COMPILE=aarch64-linux-gnu-
+
+# Cấu hình kernel (dùng config chung cho MSM8916)
+make msm8916_defconfig
+
+# (Tùy chọn) Bật thêm module USB_ACM nếu chưa có
+# echo 'CONFIG_USB_ACM=y' >> .config && make olddefconfig
+
+# Build kernel và tạo các gói .deb
+make -j$(nproc) bindeb-pkg
+
+# Copy các file .deb vừa tạo vào thư mục tạm trong rootfs
+mkdir -p ${CHROOT}/tmp/debs
+cp /tmp/linux-*.deb ${CHROOT}/tmp/debs/
+
+# Dọn dẹp source
+cd /
+rm -rf /tmp/kernel-src
+
+# Cài đặt kernel vào hệ thống (trong chroot)
+echo "Đang cài đặt kernel tự build..."
+chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "dpkg -i /tmp/debs/*.deb || true"
+chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "apt --fix-broken install -y"
+
+# Dọn dẹp file .deb trong rootfs
+rm -rf ${CHROOT}/tmp/debs
+
+# ================================================================
+# TIẾP TỤC CÁC CẤU HÌNH CÒN LẠI
+# ================================================================
+
+# cleanup mounts (sau khi đã cài kernel)
 for a in proc sys dev/pts dev run; do
     umount ${CHROOT}/${a}
 done;
@@ -54,43 +100,19 @@ cat << EOF > ${CHROOT}/etc/udev/rules.d/99-nm-usb0.rules
 SUBSYSTEM=="net", ACTION=="add|change|move", ENV{DEVTYPE}=="gadget", ENV{NM_UNMANAGED}="0"
 EOF
 
-# ============================================================
-# PHẦN ĐÃ SỬA: Cài kernel tự build (thay vì tải từ postmarketOS)
-# ============================================================
-
-# Tạo thư mục chứa các file deb
-mkdir -p ${CHROOT}/tmp/debs
-
-# Tải 4 file .deb từ Google Drive về thư mục tạm trong rootfs
-echo "Đang tải kernel tự build từ Google Drive..."
-wget --no-check-certificate "https://drive.google.com/uc?id=11UzsgVXx2Mtv458dAM6f9D47WBH2pt-k&export=download&confirm=t" -O ${CHROOT}/tmp/debs/linux-image-5.15.0-handsomekernel+_5.15.0-handsomekernel+-1_arm64.deb
-wget --no-check-certificate "https://drive.google.com/uc?id=16IorhDrvNJBXkgiJatVyEITejLbDGVYL&export=download&confirm=t" -O ${CHROOT}/tmp/debs/linux-libc-dev_5.15.0-handsomekernel+-1_arm64.deb
-wget --no-check-certificate "https://drive.google.com/uc?id=1uhdihOJdlTyEXtdm7WMw95baJ2Qj9pJv" -O ${CHROOT}/tmp/debs/linux-headers-5.15.0-handsomekernel+_5.15.0-handsomekernel+-1_arm64.deb
-wget --no-check-certificate "https://drive.google.com/uc?id=1gt8sfv7MDXY3wBTdqOfNbgKNcmyIYNnT&export=download&confirm=t" -O ${CHROOT}/tmp/debs/linux-image-5.15.0-handsomekernel+-dbg_5.15.0-handsomekernel+-1_arm64.deb
-
-# Cài đặt các file .deb bên trong chroot
-echo "Đang cài đặt kernel tự build..."
-chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "dpkg -i /tmp/debs/*.deb || true"
-chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "apt --fix-broken install -y"
-
-# Dọn dẹp file .deb sau khi cài
-rm -rf ${CHROOT}/tmp/debs
-
-# ============================================================
-# TIẾP TỤC PHẦN CÒN LẠI CỦA SCRIPT (không thay đổi)
-# ============================================================
-
+# Tạo thư mục boot và copy extlinux.conf
 mkdir -p ${CHROOT}/boot/extlinux
 cp configs/extlinux.conf ${CHROOT}/boot/extlinux
 
-# copy custom dtb's
+# Tạo thư mục dtbs và copy các dtb tùy chỉnh
+mkdir -p ${CHROOT}/boot/dtbs/qcom
 cp dtbs/* ${CHROOT}/boot/dtbs/qcom
 
-# create missing directory
+# Tạo thư mục firmware
 mkdir -p ${CHROOT}/lib/firmware/msm-firmware-loader
 
-# update fstab
+# Cập nhật fstab
 echo "PARTUUID=80780b1d-0fe1-27d3-23e4-9244e62f8c46\t/boot\text2\tdefaults\t0 2" > ${CHROOT}/etc/fstab
 
-# backup rootfs
+# Backup rootfs
 tar cpzf rootfs.tgz --exclude="usr/bin/qemu-aarch64-static" -C rootfs .
