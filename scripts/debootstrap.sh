@@ -1,5 +1,8 @@
 #!/bin/sh -e
 
+# Lưu đường dẫn thư mục làm việc hiện tại
+BUILD_DIR=$(pwd)
+
 CHROOT=${CHROOT=$(pwd)/rootfs}
 RELEASE=${RELEASE=stable}
 HOST_NAME=${HOST_NAME=openstick-debian}
@@ -62,6 +65,13 @@ cp /tmp/linux-*.deb ${CHROOT}/tmp/debs/
 cd /
 rm -rf /tmp/kernel-src
 
+# QUAY LẠI THƯ MỤC LÀM VIỆC BAN ĐẦU
+cd ${BUILD_DIR}
+
+# ================================================================
+# TIẾP TỤC CÁC CẤU HÌNH CÒN LẠI
+# ================================================================
+
 # Cài đặt kernel vào hệ thống (trong chroot)
 echo "Đang cài đặt kernel tự build..."
 chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "dpkg -i /tmp/debs/*.deb || true"
@@ -69,10 +79,6 @@ chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "apt --fix-broken install -y"
 
 # Dọn dẹp file .deb trong rootfs
 rm -rf ${CHROOT}/tmp/debs
-
-# ================================================================
-# TIẾP TỤC CÁC CẤU HÌNH CÒN LẠI (có kiểm tra tồn tại thư mục)
-# ================================================================
 
 # clean mounts (lần đầu - đảm bảo unmount trước khi tiếp tục)
 for a in proc sys dev/pts dev run; do
@@ -129,5 +135,5 @@ for a in proc sys dev/pts dev run; do
     umount ${CHROOT}/${a} 2>/dev/null || true
 done;
 
-# Backup rootfs
+# Backup rootfs (lúc này đã ở đúng thư mục BUILD_DIR)
 tar cpzf rootfs.tgz --exclude="usr/bin/qemu-aarch64-static" -C rootfs .
