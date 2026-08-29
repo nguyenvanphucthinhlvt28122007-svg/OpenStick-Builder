@@ -54,9 +54,31 @@ cat << EOF > ${CHROOT}/etc/udev/rules.d/99-nm-usb0.rules
 SUBSYSTEM=="net", ACTION=="add|change|move", ENV{DEVTYPE}=="gadget", ENV{NM_UNMANAGED}="0"
 EOF
 
-# install kernel
-wget -O - http://mirror.postmarketos.org/postmarketos/v24.06/aarch64/linux-postmarketos-qcom-msm8916-6.6-r5.apk \
-    | tar xkzf - -C ${CHROOT} --exclude=.PKGINFO --exclude=.SIGN* 2>/dev/null
+# ============================================================
+# PHẦN ĐÃ SỬA: Cài kernel tự build (thay vì tải từ postmarketOS)
+# ============================================================
+
+# Tạo thư mục chứa các file deb
+mkdir -p ${CHROOT}/tmp/debs
+
+# Tải 4 file .deb từ Google Drive về thư mục tạm trong rootfs
+echo "Đang tải kernel tự build từ Google Drive..."
+wget --no-check-certificate "https://drive.google.com/uc?id=11UzsgVXx2Mtv458dAM6f9D47WBH2pt-k&export=download&confirm=t" -O ${CHROOT}/tmp/debs/linux-image-5.15.0-handsomekernel+_5.15.0-handsomekernel+-1_arm64.deb
+wget --no-check-certificate "https://drive.google.com/uc?id=16IorhDrvNJBXkgiJatVyEITejLbDGVYL&export=download&confirm=t" -O ${CHROOT}/tmp/debs/linux-libc-dev_5.15.0-handsomekernel+-1_arm64.deb
+wget --no-check-certificate "https://drive.google.com/uc?id=1uhdihOJdlTyEXtdm7WMw95baJ2Qj9pJv" -O ${CHROOT}/tmp/debs/linux-headers-5.15.0-handsomekernel+_5.15.0-handsomekernel+-1_arm64.deb
+wget --no-check-certificate "https://drive.google.com/uc?id=1gt8sfv7MDXY3wBTdqOfNbgKNcmyIYNnT&export=download&confirm=t" -O ${CHROOT}/tmp/debs/linux-image-5.15.0-handsomekernel+-dbg_5.15.0-handsomekernel+-1_arm64.deb
+
+# Cài đặt các file .deb bên trong chroot
+echo "Đang cài đặt kernel tự build..."
+chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "dpkg -i /tmp/debs/*.deb || true"
+chroot ${CHROOT} qemu-aarch64-static /bin/bash -c "apt --fix-broken install -y"
+
+# Dọn dẹp file .deb sau khi cài
+rm -rf ${CHROOT}/tmp/debs
+
+# ============================================================
+# TIẾP TỤC PHẦN CÒN LẠI CỦA SCRIPT (không thay đổi)
+# ============================================================
 
 mkdir -p ${CHROOT}/boot/extlinux
 cp configs/extlinux.conf ${CHROOT}/boot/extlinux
