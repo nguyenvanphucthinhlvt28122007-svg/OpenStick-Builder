@@ -1,0 +1,52 @@
+name: Build OpenStick (Debian MSM8916)
+
+on:
+  workflow_dispatch:
+    inputs:
+      board_type:
+        description: 'Chọn mã bo mạch USB 4G của bạn (Để tự động sửa lỗi mất Wi-Fi/RNDIS)'
+        required: true
+        default: 'thwc-uf896'
+        type: choice
+        options:
+          - thwc-uf896
+          - thwc-ufi001c
+          - yiming-uz801v3
+          - jz01-45-v33
+          - fy-mf800
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        repository: 'kinsamanka/OpenStick-Builder'
+        submodules: 'recursive'
+
+    - name: Run Build Script (Install deps & Build)
+      run: |
+        # Chạy file build.sh của tác giả (bao gồm tải firmware, tạo rootfs...)
+        sudo bash ./build.sh
+
+    - name: Patch DTB Configuration for Your Board
+      run: |
+        echo "Bắt đầu tự động sửa file cấu hình mạng cho bo mạch: ${{ inputs.board_type }}"
+        # Tạo thư mục tạm để mount file rootfs
+        mkdir -p /tmp/rootfs
+        sudo mount -o loop files/rootfs.bin /tmp/rootfs
+        
+        # Đổi mã bo mạch từ mặc định (uz801) sang loại bạn đã chọn
+        sudo sed -i 's/yiming-uz801v3/${{ inputs.board_type }}/' /tmp/rootfs/boot/extlinux/extlinux.conf
+        
+        # Bỏ mount để lưu file
+        sudo umount /tmp/rootfs
+        echo "Đã sửa xong cấu hình bo mạch!"
+
+    - name: Upload Debian Firmware
+      uses: actions/upload-artifact@v4
+      with:
+        name: OpenStick_Debian_${{ inputs.board_type }}
+        path: files/
