@@ -51,7 +51,7 @@ KERNEL_BUILD_DIR="/tmp/openstick_kernel_build"
 rm -rf ${KERNEL_BUILD_DIR}
 mkdir -p ${KERNEL_BUILD_DIR}
 
-git clone --depth 1 https://github.com/dann2333/MSM8916-openstick-linux-kernel.git ${KERNEL_BUILD_DIR}/src
+git clone --depth 1 https://github.com/nguyenvanphucthinhlvt28122007-svg/MSM8916-openstick-linux-kernel.git ${KERNEL_BUILD_DIR}/src
 cd ${KERNEL_BUILD_DIR}/src
 
 export ARCH=arm64
